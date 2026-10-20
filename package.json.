@@ -1,0 +1,15 @@
+
+{
+  "name": "moed-bot",
+  "version": "1.0.0",
+  "description": "Bot de Discord con IA de MOED y Firebase",
+  "main": "index.js",
+  "scripts": {
+    "start": "node index.js"
+  },
+  "dependencies": {
+    "discord.js": "^14.19.3",
+    "dotenv": "^16.4.7",
+    "firebase-admin": "^13.2.0"
+  }
+}
