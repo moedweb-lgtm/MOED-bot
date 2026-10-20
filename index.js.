@@ -1,0 +1,128 @@
+
+require("dotenv").config();
+
+const {
+  Client,
+  GatewayIntentBits,
+  SlashCommandBuilder,
+  REST,
+  Routes
+} = require("discord.js");
+
+const admin = require("firebase-admin");
+
+if (!process.env.DISCORD_TOKEN ||
+    !process.env.CLIENT_ID ||
+    !process.env.GUILD_ID) {
+  throw new Error("Faltan variables de entorno obligatorias.");
+}
+
+if (!admin.apps.length) {
+  admin.initializeApp();
+}
+
+const db = admin.firestore();
+
+const client = new Client({
+  intents: [GatewayIntentBits.Guilds]
+});
+
+const commands = [
+  new SlashCommandBuilder()
+    .setName("hola")
+    .setDescription("Saluda a MOED BOT"),
+
+  new SlashCommandBuilder()
+    .setName("ayuda")
+    .setDescription("Muestra los comandos disponibles"),
+
+  new SlashCommandBuilder()
+    .setName("ia")
+    .setDescription("Pregunta a la IA de MOED")
+    .addStringOption(option =>
+      option
+        .setName("pregunta")
+        .setDescription("Tu pregunta")
+        .setRequired(true)
+    )
+].map(command => command.toJSON());
+
+async function registrarComandos() {
+  const rest = new REST({ version: "10" })
+    .setToken(process.env.DISCORD_TOKEN);
+
+  await rest.put(
+    Routes.applicationGuildCommands(
+      process.env.CLIENT_ID,
+      process.env.GUILD_ID
+    ),
+    { body: commands }
+  );
+
+  console.log("Comandos de MOED BOT registrados.");
+}
+
+client.once("ready", () => {
+  console.log(`MOED BOT conectado como ${client.user.tag}`);
+});
+
+client.on("interactionCreate", async interaction => {
+  if (!interaction.isChatInputCommand()) return;
+
+  try {
+    if (interaction.commandName === "hola") {
+      await interaction.reply("¡Holaaa! 🤖💙 Soy MOED BOT.");
+      return;
+    }
+
+    if (interaction.commandName === "ayuda") {
+      await interaction.reply(
+        "**MOED BOT**\n" +
+        "`/hola` — Saludar\n" +
+        "`/ayuda` — Ver comandos\n" +
+        "`/ia pregunta` — Consultar la IA"
+      );
+      return;
+    }
+
+    if (interaction.commandName === "ia") {
+      await interaction.deferReply();
+      await interaction.editReply(
+        "¡Estoy aquí! La conexión con el modelo de MOED IA todavía está pendiente. 💙"
+      );
+    }
+
+    await db.collection("historial_comandos").add({
+      comando: interaction.commandName,
+      servidor: interaction.guildId,
+      usuario: interaction.user.id,
+      fecha: admin.firestore.FieldValue.serverTimestamp()
+    });
+
+    await db.collection("estadisticas")
+      .doc(interaction.guildId || "privado")
+      .set({
+        totalComandos: admin.firestore.FieldValue.increment(1),
+        actualizacion: admin.firestore.FieldValue.serverTimestamp()
+      }, { merge: true });
+
+  } catch (error) {
+    console.error("Error al procesar el comando:", error);
+
+    if (interaction.deferred) {
+      await interaction.editReply("Ha ocurrido un error. Inténtalo de nuevo.");
+    } else if (!interaction.replied) {
+      await interaction.reply({
+        content: "Ha ocurrido un error. Inténtalo de nuevo.",
+        ephemeral: true
+      });
+    }
+  }
+});
+
+async function main() {
+  await registrarComandos();
+  await client.login(process.env.DISCORD_TOKEN);
+}
+
+main().catch(console.error);
